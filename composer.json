@@ -1,0 +1,12 @@
+{
+    "name": "fuzionnz/nz.co.fuzion.telemetry",
+    "description": "Collects CiviCRM site stats and sends them to a central monitoring dashboard.",
+    "type": "civicrm-extension",
+    "license": "AGPL-3.0",
+    "authors": [
+        {
+            "name": "Sachin Doijad",
+            "email": "sachin@fuzion.co.nz"
+        }
+    ]
+}
