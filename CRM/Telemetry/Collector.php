@@ -16,6 +16,7 @@ class CRM_Telemetry_Collector {
       'smarty_version'    => $this->getSmartyVersion(),
       'outbound_mail'     => $this->getOutboundMail(),
       'extensions'        => $this->getExtensions(),
+      'modules'           => $this->getModules(),
       'payment_processors' => $this->getPaymentProcessors(),
       'system_checks'     => $this->getSystemCheckErrors(),
     ];
@@ -111,6 +112,104 @@ class CRM_Telemetry_Collector {
       ];
     }
     return $processors;
+  }
+
+  /** Drupal modules or WordPress plugins, split into contrib/custom for the dashboard. */
+  private function getModules() {
+    if (CIVICRM_UF === 'WordPress') {
+      return $this->getWordPressPlugins();
+    }
+    if (CIVICRM_UF === 'Drupal8' || CIVICRM_UF === 'Drupal') {
+      return class_exists('\Drupal') ? $this->getDrupal8Modules() : $this->getDrupal7Modules();
+    }
+    return [];
+  }
+
+  private function getDrupal8Modules() {
+    $modules = [];
+    try {
+      $list = \Drupal::service('extension.list.module')->getList();
+      foreach ($list as $name => $module) {
+        if (!empty($module->info['hidden']) || strpos($module->getPath(), '/core/') === 0) {
+          continue;
+        }
+        $modules[] = [
+          'key'     => $name,
+          'label'   => $module->info['name'] ?? $name,
+          'version' => $module->info['version'] ?? '',
+          'enabled' => (bool) $module->status,
+          // Not on wordpress.org-style contrib/custom split — Drupal convention is a
+          // /custom/ subfolder for bespoke modules, anything else counts as contrib.
+          'package' => strpos($module->getPath(), '/custom/') !== FALSE ? 'custom' : 'contrib',
+        ];
+      }
+    }
+    catch (Exception $e) {}
+    return $modules;
+  }
+
+  private function getDrupal7Modules() {
+    $modules = [];
+    try {
+      if (!function_exists('system_rebuild_module_data')) {
+        return [];
+      }
+      foreach (system_rebuild_module_data() as $name => $module) {
+        if (!empty($module->info['hidden']) || strpos($module->filename, 'sites/') !== 0) {
+          continue;
+        }
+        $modules[] = [
+          'key'     => $name,
+          'label'   => $module->info['name'] ?? $name,
+          'version' => $module->info['version'] ?? '',
+          'enabled' => (bool) $module->status,
+          'package' => strpos($module->filename, '/custom/') !== FALSE ? 'custom' : 'contrib',
+        ];
+      }
+    }
+    catch (Exception $e) {}
+    return $modules;
+  }
+
+  /**
+   * Contrib vs custom for WP: reuses the update_plugins transient WP already maintains —
+   * plugins matched against wordpress.org show up in its response/no_update arrays, so
+   * anything absent from both wasn't found on wordpress.org and counts as custom.
+   */
+  private function getWordPressPlugins() {
+    $modules = [];
+    try {
+      if (!function_exists('get_plugins')) {
+        require_once ABSPATH . 'wp-admin/includes/plugin.php';
+      }
+      $allPlugins = get_plugins();
+      $activePlugins = (array) get_option('active_plugins', []);
+      if (is_multisite()) {
+        $activePlugins = array_merge($activePlugins, array_keys((array) get_site_option('active_sitewide_plugins', [])));
+      }
+
+      $onOrg = [];
+      $updateData = get_site_transient('update_plugins');
+      if ($updateData) {
+        foreach (['response', 'no_update'] as $key) {
+          foreach ((array) ($updateData->$key ?? []) as $file => $info) {
+            $onOrg[$file] = TRUE;
+          }
+        }
+      }
+
+      foreach ($allPlugins as $file => $info) {
+        $modules[] = [
+          'key'     => $file,
+          'label'   => $info['Name'] ?? $file,
+          'version' => $info['Version'] ?? '',
+          'enabled' => in_array($file, $activePlugins, TRUE),
+          'package' => isset($onOrg[$file]) ? 'contrib' : 'custom',
+        ];
+      }
+    }
+    catch (Exception $e) {}
+    return $modules;
   }
 
   private function getSystemCheckErrors() {
