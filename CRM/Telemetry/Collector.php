@@ -129,6 +129,7 @@ class CRM_Telemetry_Collector {
     $modules = [];
     try {
       $list = \Drupal::service('extension.list.module')->getList();
+      $statusByModule = $this->getDrupalUpdateStatusMap();
       foreach ($list as $name => $module) {
         if (!empty($module->info['hidden']) || strpos($module->getPath(), 'core/') === 0) {
           continue;
@@ -141,11 +142,58 @@ class CRM_Telemetry_Collector {
           // Not on wordpress.org-style contrib/custom split — Drupal convention is a
           // /custom/ subfolder for bespoke modules, anything else counts as contrib.
           'package' => strpos($module->getPath(), '/custom/') !== FALSE ? 'custom' : 'contrib',
+          'status'  => $statusByModule[$name] ?? 'unknown',
         ];
       }
     }
     catch (Exception $e) {}
     return $modules;
+  }
+
+  /**
+   * Module name => 'ok'|'upgrade'|'unsupported'|'unknown', using Drupal core's Update
+   * Manager. Reads whatever it already has cached — never triggers a live fetch, since
+   * telemetry cron shouldn't be making its own drupal.org calls.
+   * @see \Drupal\update\UpdateManagerInterface
+   */
+  private function getDrupalUpdateStatusMap() {
+    $map = [];
+    try {
+      if (!\Drupal::hasService('module_handler') || !\Drupal::moduleHandler()->moduleExists('update')) {
+        return $map;
+      }
+      \Drupal::moduleHandler()->loadInclude('update', 'inc', 'update.compare');
+      $available = update_get_available(FALSE);
+      if (empty($available)) {
+        return $map;
+      }
+      $projects = update_calculate_project_data($available);
+      $badStatuses = [
+        \Drupal\update\UpdateManagerInterface::NOT_SECURE,
+        \Drupal\update\UpdateManagerInterface::REVOKED,
+        \Drupal\update\UpdateManagerInterface::NOT_SUPPORTED,
+      ];
+      foreach ($projects as $project) {
+        $status = $project['status'] ?? NULL;
+        if (in_array($status, $badStatuses, TRUE)) {
+          $label = 'unsupported';
+        }
+        elseif ($status === \Drupal\update\UpdateManagerInterface::NOT_CURRENT) {
+          $label = 'upgrade';
+        }
+        elseif ($status === \Drupal\update\UpdateManagerInterface::CURRENT) {
+          $label = 'ok';
+        }
+        else {
+          $label = 'unknown';
+        }
+        foreach ($project['includes'] ?? [] as $moduleName => $moduleLabel) {
+          $map[$moduleName] = $label;
+        }
+      }
+    }
+    catch (Exception $e) {}
+    return $map;
   }
 
   private function getDrupal7Modules() {
@@ -189,12 +237,15 @@ class CRM_Telemetry_Collector {
       }
 
       $onOrg = [];
+      $hasUpdate = [];
       $updateData = get_site_transient('update_plugins');
       if ($updateData) {
-        foreach (['response', 'no_update'] as $key) {
-          foreach ((array) ($updateData->$key ?? []) as $file => $info) {
-            $onOrg[$file] = TRUE;
-          }
+        foreach ((array) ($updateData->no_update ?? []) as $file => $info) {
+          $onOrg[$file] = TRUE;
+        }
+        foreach ((array) ($updateData->response ?? []) as $file => $info) {
+          $onOrg[$file] = TRUE;
+          $hasUpdate[$file] = TRUE;
         }
       }
 
@@ -205,6 +256,7 @@ class CRM_Telemetry_Collector {
           'version' => $info['Version'] ?? '',
           'enabled' => in_array($file, $activePlugins, TRUE),
           'package' => isset($onOrg[$file]) ? 'contrib' : 'custom',
+          'status'  => isset($hasUpdate[$file]) ? 'upgrade' : (isset($onOrg[$file]) ? 'ok' : 'unknown'),
         ];
       }
     }
