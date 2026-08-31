@@ -130,7 +130,7 @@ class CRM_Telemetry_Collector {
     try {
       $list = \Drupal::service('extension.list.module')->getList();
       foreach ($list as $name => $module) {
-        if (!empty($module->info['hidden']) || strpos($module->getPath(), '/core/') === 0) {
+        if (!empty($module->info['hidden']) || strpos($module->getPath(), 'core/') === 0) {
           continue;
         }
         $modules[] = [
