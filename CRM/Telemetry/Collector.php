@@ -9,6 +9,7 @@ class CRM_Telemetry_Collector {
     return [
       'site_key'          => $this->getSiteKey(),
       'site_url'          => CRM_Utils_System::baseURL(),
+      'server'            => gethostname() ?: 'unknown',
       'environment'       => Civi::settings()->get('telemetry_environment') ?: 'unknown',
       'reported_at'       => date('Y-m-d H:i:s'),
       'civicrm_version'   => CRM_Utils_System::version(),
