@@ -14,6 +14,8 @@ class CRM_Telemetry_Collector {
       'reported_at'       => date('Y-m-d H:i:s'),
       'civicrm_version'   => CRM_Utils_System::version(),
       'php_version'       => phpversion(),
+      'cms'               => $this->getCms(),
+      'cms_version'       => $this->getCmsVersion(),
       'smarty_version'    => $this->getSmartyVersion(),
       'outbound_mail'     => $this->getOutboundMail(),
       'extensions'        => $this->getExtensions(),
@@ -25,6 +27,24 @@ class CRM_Telemetry_Collector {
 
   private function getSiteKey() {
     return Civi::settings()->get('site_id') ?: md5(CRM_Utils_System::baseURL());
+  }
+
+  /** #33573 - CMS name + version so the dashboard can filter sites by CMS release. */
+  private function getCms() {
+    if (CIVICRM_UF === 'WordPress') {
+      return 'WordPress';
+    }
+    return (CIVICRM_UF === 'Drupal8' || CIVICRM_UF === 'Drupal') ? 'Drupal' : CIVICRM_UF;
+  }
+
+  private function getCmsVersion() {
+    if (CIVICRM_UF === 'WordPress') {
+      return function_exists('get_bloginfo') ? get_bloginfo('version') : 'unknown';
+    }
+    if (class_exists('\Drupal')) {
+      return \Drupal::VERSION;
+    }
+    return defined('VERSION') ? VERSION : 'unknown';
   }
 
   private function getSmartyVersion() {

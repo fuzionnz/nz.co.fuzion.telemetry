@@ -7,4 +7,11 @@
     <access_arguments>administer CiviCRM</access_arguments>
     <is_public>0</is_public>
   </item>
+  <item>
+    <path>civicrm/telemetry/refresh</path>
+    <title>Telemetry Refresh</title>
+    <page_callback>CRM_Telemetry_Page_Refresh</page_callback>
+    <access_arguments>*always allow*</access_arguments>
+    <is_public>1</is_public>
+  </item>
 </menu>
