@@ -16,6 +16,7 @@ class CRM_Telemetry_Collector {
       'php_version'       => phpversion(),
       'cms'               => $this->getCms(),
       'cms_version'       => $this->getCmsVersion(),
+      'refresh_url'       => CRM_Utils_System::url('civicrm/telemetry/refresh', NULL, TRUE, NULL, FALSE, TRUE),
       'smarty_version'    => $this->getSmartyVersion(),
       'outbound_mail'     => $this->getOutboundMail(),
       'extensions'        => $this->getExtensions(),
